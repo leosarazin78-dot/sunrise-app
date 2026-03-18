@@ -1,401 +1,396 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
-// ━━━ THEMES (dark, clock-like, warm) ━━━━━━━━━━━━━━━━━
-const THEMES = {
-  minuit: { name: "Minuit", icon: "🕛", bg: "#0a0a0f", bg2: "#111118", card: "rgba(255,255,255,0.03)", cb: "rgba(255,255,255,0.06)", ac: "#c9a86c", ac2: "#8a6d3b", tx: "#d4cfc7", mu: "rgba(212,207,199,0.35)", gw: "rgba(201,168,108,0.08)", clock: "#c9a86c" },
-  charbon: { name: "Charbon", icon: "🌑", bg: "#0d0d0d", bg2: "#151515", card: "rgba(255,255,255,0.025)", cb: "rgba(255,255,255,0.05)", ac: "#e8b96f", ac2: "#a07840", tx: "#c8c4bc", mu: "rgba(200,196,188,0.35)", gw: "rgba(232,185,111,0.07)", clock: "#e8b96f" },
-  ardoise: { name: "Ardoise", icon: "🪨", bg: "#0e1117", bg2: "#141820", card: "rgba(255,255,255,0.03)", cb: "rgba(255,255,255,0.06)", ac: "#7eb8c9", ac2: "#4a8a9f", tx: "#c5cdd6", mu: "rgba(197,205,214,0.35)", gw: "rgba(126,184,201,0.07)", clock: "#7eb8c9" },
-  foret: { name: "Forêt noire", icon: "🌲", bg: "#090e09", bg2: "#0f160f", card: "rgba(255,255,255,0.025)", cb: "rgba(255,255,255,0.05)", ac: "#8baa6b", ac2: "#5a7a3a", tx: "#c2cab8", mu: "rgba(194,202,184,0.35)", gw: "rgba(139,170,107,0.07)", clock: "#8baa6b" },
-  crepuscule: { name: "Crépuscule", icon: "🌆", bg: "#0c0812", bg2: "#12101a", card: "rgba(255,255,255,0.03)", cb: "rgba(255,255,255,0.06)", ac: "#b08acd", ac2: "#7a5a9f", tx: "#cdc6d8", mu: "rgba(205,198,216,0.35)", gw: "rgba(176,138,205,0.07)", clock: "#b08acd" },
+/*
+  SUNRISE v7 — Premium dark design inspired by Lovon
+  - Single config state fixes onboarding → home transition
+  - Calorie estimator for custom recipes
+  - Professional, minimal aesthetic
+*/
+
+// ━━━ CALORIE DATABASE (per 100g or unit) ━━━━━━━━━━━━━
+const CAL_DB = {
+  "yaourt":59,"yaourt grec":97,"lait":42,"lait amande":17,"lait avoine":46,"lait coco":230,
+  "banane":89,"pomme":52,"fraise":32,"myrtille":57,"kiwi":61,"mangue":60,"orange":47,"pêche":39,
+  "avocat":160,"tomate":18,"épinard":23,"concombre":16,"carotte":41,
+  "oeuf":155,"œuf":155,"beurre":717,"beurre cacahuète":588,"confiture":250,"miel":304,"nutella":530,
+  "pain":265,"pain complet":247,"pain de mie":267,"baguette":270,"croissant":406,"brioche":357,
+  "flocon avoine":389,"granola":471,"muesli":340,"céréales":379,"chia":486,
+  "fromage":350,"comté":418,"emmental":380,"chèvre":364,"cream cheese":342,
+  "jambon":145,"saumon fumé":117,"thon":130,
+  "chocolat":546,"cacao":228,"sirop érable":260,"sucre":387,
+  "amande":579,"noix":654,"noisette":628,"noix coco":354,
+  "café":2,"thé":1,"jus orange":45,"smoothie":50,
+  "crêpe":190,"pancake":227,"gaufre":312,"tartine":180,
+  "protéine":120,"whey":400,"compote":68,"fromage blanc":73,
 };
 
-// ━━━ PROFILES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const PROFILES = [
-  { id: "sportif", icon: "🏃", name: "Sportif", desc: "Sport, nutrition protéinée, musique motivante", plugs: ["meteo","sport","petitdej","spotify","citation"], theme: "charbon", radioIdx: 3, sportMode: "app", pdjPref: [0,2,4] },
-  { id: "bureau", icon: "💼", name: "Bureau", desc: "Actus, agenda, podcast, café tranquille", plugs: ["meteo","news","agenda","podcast","petitdej"], theme: "minuit", radioIdx: 0, sportMode: "youtube", pdjPref: [1,3,6] },
-  { id: "creatif", icon: "🎨", name: "Créatif", desc: "Inspiration, yoga, musique douce, smoothie", plugs: ["citation","yoga","petitdej","spotify","meteo"], theme: "crepuscule", radioIdx: 2, sportMode: "youtube", pdjPref: [2,5,3] },
-  { id: "etudiant", icon: "📚", name: "Étudiant", desc: "Actus rapides, sport express, petit budget", plugs: ["meteo","news","sport","petitdej","citation"], theme: "ardoise", radioIdx: 4, sportMode: "app", pdjPref: [0,3,6] },
-  { id: "parent", icon: "👨‍👩‍👧", name: "Parent", desc: "Agenda familial, météo, recette enfant, zen", plugs: ["meteo","agenda","petitdej","yoga","radio"], theme: "foret", radioIdx: 0, sportMode: "youtube", pdjPref: [4,3,0] },
-  { id: "custom", icon: "⚙️", name: "Personnalisé", desc: "Tout configurer soi-même", plugs: ["meteo","agenda","petitdej"], theme: "minuit", radioIdx: 0, sportMode: "app", pdjPref: [0,1,2] },
-];
+function estimateCal(recipeName) {
+  const lower = recipeName.toLowerCase();
+  let total = 0; let matches = 0;
+  for (const [food, cal] of Object.entries(CAL_DB)) {
+    if (lower.includes(food)) { total += cal * 0.8; matches++; }
+  }
+  if (matches === 0) return { cal: 350, prot: 12, note: "Estimation moyenne" };
+  const cal = Math.round(Math.min(700, Math.max(150, total)));
+  const prot = Math.round(cal * 0.12 / 4);
+  return { cal, prot, note: `Estimé (${matches} ingrédient${matches>1?"s":""} détecté${matches>1?"s":""})` };
+}
+
+// ━━━ DESIGN TOKENS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const D = {
+  bg: "#09090b",
+  bg2: "#0f0f12",
+  surface: "rgba(255,255,255,0.03)",
+  border: "rgba(255,255,255,0.06)",
+  borderHi: "rgba(255,255,255,0.1)",
+  text: "#e4e4e7",
+  text2: "rgba(228,228,231,0.55)",
+  text3: "rgba(228,228,231,0.3)",
+  accent: "#d4a853",
+  accentSoft: "rgba(212,168,83,0.12)",
+  accentBorder: "rgba(212,168,83,0.25)",
+  green: "#4ade80",
+  red: "#ef4444",
+  radius: 12,
+  font: "'Outfit','SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif",
+};
+
+const CSS = `
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes breathe{0%,100%{opacity:.6}50%{opacity:1}}
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700&display=swap');
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{background:${D.bg};font-family:${D.font}}
+input[type="time"]::-webkit-calendar-picker-indicator{filter:invert(.4)}
+::-webkit-scrollbar{width:0}
+::placeholder{color:${D.text3}}
+`;
 
 // ━━━ DATA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const ALL_PLUGINS = [
-  { id: "meteo", icon: "🌤️", name: "Météo", cat: "info" },
-  { id: "news", icon: "📰", name: "Actus", cat: "info" },
-  { id: "agenda", icon: "📅", name: "Agenda", cat: "info" },
-  { id: "radio", icon: "📻", name: "Radio", cat: "media" },
-  { id: "podcast", icon: "🎙️", name: "Podcast", cat: "media" },
-  { id: "spotify", icon: "🎧", name: "Spotify", cat: "media" },
-  { id: "yoga", icon: "🧘", name: "Yoga", cat: "well" },
-  { id: "sport", icon: "💪", name: "Sport", cat: "well" },
-  { id: "petitdej", icon: "🥐", name: "Petit-déj", cat: "well" },
-  { id: "citation", icon: "💬", name: "Citation", cat: "well" },
+const PROFILES = [
+  { id:"sportif",icon:"●",label:"Sportif",sub:"Sport · Nutrition · Énergie",plugs:["meteo","sport","petitdej","spotify","citation"],radio:3 },
+  { id:"bureau",icon:"●",label:"Bureau",sub:"Actus · Agenda · Podcast",plugs:["meteo","news","agenda","podcast","petitdej"],radio:0 },
+  { id:"creatif",icon:"●",label:"Créatif",sub:"Inspiration · Yoga · Musique",plugs:["citation","yoga","petitdej","spotify","meteo"],radio:2 },
+  { id:"etudiant",icon:"●",label:"Étudiant",sub:"Actus · Sport express · Budget",plugs:["meteo","news","sport","petitdej","citation"],radio:4 },
+  { id:"parent",icon:"●",label:"Parent",sub:"Agenda · Météo · Zen",plugs:["meteo","agenda","petitdej","yoga","radio"],radio:0 },
+  { id:"custom",icon:"○",label:"Sur mesure",sub:"Configurez tout",plugs:["meteo","agenda","petitdej"],radio:0 },
 ];
 
-const RADIOS = [
-  { name: "France Inter", url: "https://icecast.radiofrance.fr/franceinter-hifi.aac" },
-  { name: "France Info", url: "https://icecast.radiofrance.fr/franceinfo-hifi.aac" },
-  { name: "FIP", url: "https://icecast.radiofrance.fr/fip-hifi.aac" },
-  { name: "NRJ", url: "https://scdn.nrjaudio.fm/adwz2/fr/30001/mp3_128.mp3" },
-  { name: "Chérie FM", url: "https://scdn.nrjaudio.fm/adwz2/fr/30201/mp3_128.mp3" },
-  { name: "RTL", url: "https://streamer-03.rtl.fr/rtl-1-44-128" },
+const PLUGS = [
+  {id:"meteo",icon:"◐",label:"Météo",cat:"info"},{id:"news",icon:"▤",label:"Actus",cat:"info"},{id:"agenda",icon:"◫",label:"Agenda",cat:"info"},
+  {id:"radio",icon:"◉",label:"Radio",cat:"media"},{id:"podcast",icon:"◎",label:"Podcast",cat:"media"},{id:"spotify",icon:"◈",label:"Spotify",cat:"media"},
+  {id:"yoga",icon:"◯",label:"Yoga",cat:"well"},{id:"sport",icon:"△",label:"Sport",cat:"well"},{id:"petitdej",icon:"◇",label:"Petit-déj",cat:"well"},{id:"citation",icon:"❝",label:"Citation",cat:"well"},
 ];
 
-const PETITDEJ = [
-  { id:0, name:"Bowl Protéiné", icon:"🥣", cal:485, prot:28, desc:"Yaourt grec, granola, banane, miel, chia, myrtilles", energy:"Soutenue 4h", tags:["protéines","rapide"] },
-  { id:1, name:"Tartines Avocat", icon:"🍞", cal:420, prot:22, desc:"Pain complet, avocat, œuf poché, sésame, tomate", energy:"Boost matinal", tags:["équilibré","salé"] },
-  { id:2, name:"Smoothie Vert", icon:"🥤", cal:380, prot:14, desc:"Épinards, banane, lait d'amande, beurre de cacahuète", energy:"Rapide pré-sport", tags:["rapide","sport"] },
-  { id:3, name:"Porridge Cannelle", icon:"🥣", cal:410, prot:12, desc:"Flocons d'avoine, lait, pomme, cannelle, noix", energy:"Chaleur 4h", tags:["réconfort","hiver"] },
-  { id:4, name:"Crêpes Protéinées", icon:"🥞", cal:450, prot:24, desc:"Farine complète, whey, fruits rouges, sirop d'érable", energy:"Gourmande", tags:["week-end","protéines"] },
-  { id:5, name:"Açaí Bowl", icon:"🫐", cal:460, prot:10, desc:"Açaí, banane, lait de coco, granola, kiwi", energy:"Antioxydant", tags:["super-aliment","été"] },
-  { id:6, name:"Overnight Oats", icon:"🍫", cal:430, prot:16, desc:"Avoine, yaourt, cacao, chia, banane, pépites choco", energy:"Zéro effort", tags:["préparé veille","rapide"] },
+const RADIOS=[{n:"France Inter",u:"https://icecast.radiofrance.fr/franceinter-hifi.aac"},{n:"France Info",u:"https://icecast.radiofrance.fr/franceinfo-hifi.aac"},{n:"FIP",u:"https://icecast.radiofrance.fr/fip-hifi.aac"},{n:"NRJ",u:"https://scdn.nrjaudio.fm/adwz2/fr/30001/mp3_128.mp3"},{n:"Chérie FM",u:"https://scdn.nrjaudio.fm/adwz2/fr/30201/mp3_128.mp3"},{n:"RTL",u:"https://streamer-03.rtl.fr/rtl-1-44-128"}];
+
+const DEF_PDJ = [
+  {id:0,n:"Bowl Protéiné",cal:485,prot:28,d:"Yaourt grec · granola · banane · miel · chia",e:"Soutenue 4h"},
+  {id:1,n:"Tartines Avocat-Œuf",cal:420,prot:22,d:"Pain complet · avocat · œuf poché · sésame",e:"Boost matinal"},
+  {id:2,n:"Smoothie Vert",cal:380,prot:14,d:"Épinards · banane · lait d'amande · cacahuète",e:"Pré-sport"},
+  {id:3,n:"Porridge Cannelle",cal:410,prot:12,d:"Avoine · lait · pomme · cannelle · noix",e:"Chaleur 4h"},
+  {id:4,n:"Crêpes Protéinées",cal:450,prot:24,d:"Farine complète · whey · fruits rouges",e:"Gourmande"},
+  {id:5,n:"Açaí Bowl",cal:460,prot:10,d:"Açaí · banane · coco · granola · kiwi",e:"Antioxydant"},
+  {id:6,n:"Overnight Oats",cal:430,prot:16,d:"Avoine · yaourt · cacao · chia · choco",e:"Zéro effort"},
 ];
 
-const AGENDA = [
-  { time:"09:00", title:"Stand-up équipe", col:"#6366f1", prio:"high" },
-  { time:"10:30", title:"Appel client Alpha", col:"#e07898", prio:"high" },
-  { time:"12:30", title:"Déjeuner Marie", col:"#c9a86c", prio:"low" },
-  { time:"14:00", title:"Review Sprint 4", col:"#8baa6b", prio:"high" },
-];
+const AGENDA=[{t:"09:00",n:"Stand-up équipe",p:"high"},{t:"10:30",n:"Appel client Alpha",p:"high"},{t:"12:30",n:"Déjeuner Marie",p:"low"},{t:"14:00",n:"Review Sprint 4",p:"high"}];
+const NEWS=[{t:"Plan vélo : 200 km de pistes d'ici 2027",s:"Flipboard",u:"https://flipboard.com"},{t:"Startup IA lève 50M€",s:"Les Échos",u:"https://lesechos.fr"},{t:"Festival gratuit samedi",s:"Google News",u:"https://news.google.com"}];
+const CITS={"😊":"La joie est la plus belle des conquêtes. — Voltaire","😴":"Le repos est la sauce des travaux. — Plutarque","💪":"Le seul voyage impossible est celui qu'on ne commence jamais. — Robbins","😰":"La patience est amère mais son fruit est doux. — Rousseau","🤔":"Le doute est le commencement de la sagesse. — Aristote"};
+const MOODS=[{e:"😊",l:"Content"},{e:"😴",l:"Fatigué"},{e:"💪",l:"Motivé"},{e:"😰",l:"Stressé"},{e:"🤔",l:"Pensif"}];
 
-const MOODS = [{e:"😊",l:"Content"},{e:"😴",l:"Fatigué"},{e:"💪",l:"Motivé"},{e:"😰",l:"Stressé"},{e:"🤔",l:"Pensif"}];
-const MOOD_CIT = {
-  "😊":["La joie est la plus belle des conquêtes. — Voltaire"],
-  "😴":["Le repos est la sauce des travaux. — Plutarque"],
-  "💪":["Le seul voyage impossible est celui qu'on ne commence jamais. — Robbins"],
-  "😰":["La patience est amère mais son fruit est doux. — Rousseau"],
-  "🤔":["Le doute est le commencement de la sagesse. — Aristote"],
-};
+// ━━━ PRIMITIVES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const card = { background:D.surface, border:`1px solid ${D.border}`, borderRadius:D.radius, padding:"14px 16px" };
+const cardHi = (on) => on ? { ...card, border:`1px solid ${D.accentBorder}`, background:D.accentSoft } : card;
+const label = { fontSize:10, fontWeight:600, color:D.text3, letterSpacing:1.5, textTransform:"uppercase", marginBottom:10 };
+const page = { minHeight:"100vh", background:D.bg, fontFamily:D.font, color:D.text, maxWidth:430, margin:"0 auto" };
+const pad = { padding:"20px 20px calc(env(safe-area-inset-bottom,20px)+20px)" };
 
-const NEWS_CATS = ["Général","Tech","Sport","Économie","Culture","Science"];
-const MOCK_NEWS = [
-  {t:"Plan vélo : 200 km de pistes d'ici 2027",s:"Flipboard",u:"https://flipboard.com",c:"Général"},
-  {t:"Startup IA lève 50M€",s:"Les Échos",u:"https://www.lesechos.fr",c:"Tech"},
-  {t:"Festival gratuit samedi",s:"Google News",u:"https://news.google.com",c:"Culture"},
-];
-
-// ━━━ HOOKS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function useClock(){const[n,sN]=useState(new Date());useEffect(()=>{const id=setInterval(()=>sN(new Date()),1000);return()=>clearInterval(id)},[]);return n}
-
-// ━━━ CSS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const CSS=`@keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes sl{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}@keyframes pu{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}@keyframes glow{0%,100%{text-shadow:0 0 20px var(--glow)}50%{text-shadow:0 0 40px var(--glow),0 0 80px var(--glow2)}}@keyframes fadeScale{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}input[type="time"]::-webkit-calendar-picker-indicator{filter:invert(.5)}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}`;
-
-// ━━━ COMPONENTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function Toggle({on,onT,T}){return<button onClick={onT} style={{width:36,height:19,borderRadius:10,background:on?T.ac:T.card,border:`1px solid ${on?T.ac:T.cb}`,position:"relative",transition:"all .2s",flexShrink:0,cursor:"pointer",padding:0}}><div style={{width:15,height:15,borderRadius:8,background:on?"#fff":T.mu,position:"absolute",top:1,left:on?19:1,transition:"all .2s"}}/></button>}
-
-function Chip({label,on,onT,T}){return<button onClick={onT} style={{background:on?T.ac+"18":T.card,border:`1px solid ${on?T.ac+"55":T.cb}`,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:on?700:400,color:on?T.ac:T.mu,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{label}</button>}
-
-function ClockFace({time,T}){
-  const[h,m]=time.split(":");
-  return(
-    <div style={{textAlign:"center",position:"relative"}}>
-      <div style={{"--glow":T.clock+"40","--glow2":T.clock+"15",animation:"glow 4s ease infinite",fontSize:88,fontWeight:100,letterSpacing:-6,lineHeight:1,fontFamily:"'Outfit',sans-serif",color:T.clock,fontVariantNumeric:"tabular-nums"}}>{h}<span style={{opacity:.3,animation:"pu 2s infinite"}}>:</span>{m}</div>
-    </div>
-  );
+function Btn({children,onClick,primary,disabled}){
+  return <button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"14px",borderRadius:D.radius,border:primary?"none":`1px solid ${D.border}`,background:primary?D.accent:D.surface,color:primary?D.bg:D.text,fontSize:15,fontWeight:600,cursor:disabled?"default":"pointer",fontFamily:"inherit",opacity:disabled?.4:1,letterSpacing:.2,transition:"opacity .2s"}}>{children}</button>;
 }
 
-// ━━━ ONBOARDING ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function Onboarding({onComplete}){
-  const[step,setStep]=useState(0);
-  const[name,setName]=useState("");
-  const[profile,setProfile]=useState(null);
-  const[city,setCity]=useState("Paris");
-  const[aWeek,setAWeek]=useState("07:00");
-  const[aWE,setAWE]=useState("09:00");
-  const[selPDJ,setSelPDJ]=useState([0,1,3]);
-  const[theme,setTheme]=useState("minuit");
-
-  const T=THEMES[theme];
-  const pg={minHeight:"100vh",background:T.bg,fontFamily:"'Outfit',sans-serif",color:T.tx,maxWidth:430,margin:"0 auto",display:"flex",flexDirection:"column"};
-
-  const selectProfile=(p)=>{
-    setProfile(p);
-    setTheme(p.theme);
-    setSelPDJ(p.pdjPref);
-  };
-
-  const finish=()=>{
-    onComplete({name,profile:profile||PROFILES[5],city,aWeek,aWE,selPDJ,theme});
-  };
-
-  const btn=(label,onClick,primary)=>(<button onClick={onClick} style={{width:"100%",padding:"14px",borderRadius:14,border:primary?"none":`1px solid ${T.cb}`,background:primary?T.ac:T.card,color:primary?(T.bg.startsWith("#0")?"#000":T.tx):T.tx,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>{label}</button>);
-
-  // Step 0: Welcome
-  if(step===0) return(
-    <div style={pg}><style>{CSS}</style>
-      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",padding:"40px 28px",animation:"fadeScale .8s ease"}}>
-        <div style={{fontSize:64,marginBottom:16}}>🌅</div>
-        <div style={{fontSize:32,fontWeight:200,marginBottom:8}}>Sunrise</div>
-        <div style={{fontSize:14,color:T.mu,textAlign:"center",lineHeight:1.6,marginBottom:32,maxWidth:280}}>
-          Votre réveil vocal intelligent.<br/>Configurons ensemble votre routine matinale parfaite.
-        </div>
-        {btn("Commencer →",()=>setStep(1),true)}
-      </div>
-    </div>
-  );
-
-  // Step 1: Name + City
-  if(step===1) return(
-    <div style={pg}><style>{CSS}</style>
-      <div style={{flex:1,padding:"40px 24px",animation:"fu .5s"}}>
-        <div style={{fontSize:11,color:T.ac,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:20}}>Étape 1/4</div>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:28}}>Comment vous appelez-vous ?</div>
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder="Prénom" style={{width:"100%",background:T.card,border:`1px solid ${T.cb}`,borderRadius:14,padding:"14px 16px",color:T.tx,fontSize:18,fontFamily:"inherit",marginBottom:20}} autoFocus/>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:12}}>Votre ville ?</div>
-        <input value={city} onChange={e=>setCity(e.target.value)} placeholder="Paris, Lyon, Marseille…" style={{width:"100%",background:T.card,border:`1px solid ${T.cb}`,borderRadius:14,padding:"14px 16px",color:T.tx,fontSize:16,fontFamily:"inherit",marginBottom:28}}/>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:12}}>Heures de réveil</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:28}}>
-          {[["Semaine",aWeek,setAWeek],["Week-end",aWE,setAWE]].map(([l,v,s])=>(
-            <div key={l} style={{background:T.card,border:`1px solid ${T.cb}`,borderRadius:14,padding:"12px"}}>
-              <div style={{fontSize:10,color:T.mu,fontWeight:700,letterSpacing:1,marginBottom:6}}>{l.toUpperCase()}</div>
-              <input type="time" value={v} onChange={e=>s(e.target.value)} style={{width:"100%",background:"transparent",border:`1px solid ${T.cb}`,borderRadius:10,padding:8,color:T.tx,fontSize:20,fontWeight:300,fontFamily:"inherit",textAlign:"center"}}/>
-            </div>
-          ))}
-        </div>
-        {btn("Suivant →",()=>setStep(2),true)}
-      </div>
-    </div>
-  );
-
-  // Step 2: Profile
-  if(step===2) return(
-    <div style={pg}><style>{CSS}</style>
-      <div style={{flex:1,padding:"40px 24px",animation:"fu .5s",overflow:"auto"}}>
-        <div style={{fontSize:11,color:T.ac,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:20}}>Étape 2/4</div>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:6}}>Quel type de matin ?</div>
-        <div style={{fontSize:13,color:T.mu,marginBottom:20}}>Choisissez un profil — tout reste modifiable après.</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {PROFILES.map((p,i)=>(
-            <button key={p.id} onClick={()=>selectProfile(p)} style={{background:profile?.id===p.id?T.ac+"12":T.card,border:`1px solid ${profile?.id===p.id?T.ac+"55":T.cb}`,borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"inherit",color:T.tx,textAlign:"left",animation:`sl .4s ease ${i*.06}s both`,transition:"all .15s"}}>
-              <span style={{fontSize:28,width:36,textAlign:"center"}}>{p.icon}</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:15,fontWeight:600}}>{p.name}</div>
-                <div style={{fontSize:12,color:T.mu,marginTop:2}}>{p.desc}</div>
-              </div>
-              {profile?.id===p.id&&<span style={{color:T.ac,fontSize:18}}>✓</span>}
-            </button>
-          ))}
-        </div>
-        <div style={{marginTop:16}}>{btn("Suivant →",()=>setStep(3),!!profile)}</div>
-      </div>
-    </div>
-  );
-
-  // Step 3: Breakfast picker
-  if(step===3) return(
-    <div style={pg}><style>{CSS}</style>
-      <div style={{flex:1,padding:"40px 24px",animation:"fu .5s",overflow:"auto"}}>
-        <div style={{fontSize:11,color:T.ac,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:20}}>Étape 3/4</div>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:6}}>Vos petits-déjeuners</div>
-        <div style={{fontSize:13,color:T.mu,marginBottom:20}}>Sélectionnez ceux que vous aimez — ils tourneront en rotation.</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {PETITDEJ.map((p,i)=>{
-            const on=selPDJ.includes(p.id);
-            return(
-              <button key={p.id} onClick={()=>setSelPDJ(s=>on?s.filter(x=>x!==p.id):[...s,p.id])} style={{background:on?T.ac+"10":T.card,border:`1px solid ${on?T.ac+"44":T.cb}`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",fontFamily:"inherit",color:T.tx,animation:`sl .3s ease ${i*.05}s both`}}>
-                <span style={{fontSize:24}}>{p.icon}</span>
-                <div style={{flex:1,textAlign:"left"}}>
-                  <div style={{fontSize:14,fontWeight:600}}>{p.name}<span style={{fontWeight:300,color:T.mu,marginLeft:8}}>{p.cal} kcal</span></div>
-                  <div style={{fontSize:11,color:T.mu,marginTop:2}}>{p.desc}</div>
-                </div>
-                <div style={{width:22,height:22,borderRadius:6,border:`2px solid ${on?T.ac:T.cb}`,background:on?T.ac:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {on&&<span style={{color:"#fff",fontSize:12,fontWeight:700}}>✓</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        <div style={{marginTop:16}}>{btn("Suivant →",()=>setStep(4),selPDJ.length>0)}</div>
-      </div>
-    </div>
-  );
-
-  // Step 4: Theme + finish
-  if(step===4) return(
-    <div style={{...pg,background:THEMES[theme].bg}}><style>{CSS}</style>
-      <div style={{flex:1,padding:"40px 24px",animation:"fu .5s"}}>
-        <div style={{fontSize:11,color:THEMES[theme].ac,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:20}}>Étape 4/4</div>
-        <div style={{fontSize:22,fontWeight:200,marginBottom:6,color:THEMES[theme].tx}}>Ambiance</div>
-        <div style={{fontSize:13,color:THEMES[theme].mu,marginBottom:20}}>Choisissez le thème de votre réveil.</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:32}}>
-          {Object.entries(THEMES).map(([k,th])=>(
-            <button key={k} onClick={()=>setTheme(k)} style={{background:th.bg2,border:theme===k?`2px solid ${th.ac}`:`1px solid ${th.cb}`,borderRadius:14,padding:"16px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,fontFamily:"inherit"}}>
-              <span style={{fontSize:22}}>{th.icon}</span>
-              <span style={{fontSize:9,fontWeight:700,color:th.tx,letterSpacing:.5}}>{th.name}</span>
-            </button>
-          ))}
-        </div>
-        <div style={{textAlign:"center",marginBottom:32}}>
-          <ClockFace time={aWeek} T={THEMES[theme]}/>
-          <div style={{fontSize:13,color:THEMES[theme].mu,marginTop:8}}>Aperçu de votre horloge</div>
-        </div>
-        <div style={{background:THEMES[theme].card,border:`1px solid ${THEMES[theme].cb}`,borderRadius:14,padding:"14px 16px",marginBottom:20,fontSize:13,color:THEMES[theme].mu,lineHeight:1.6}}>
-          💡 <strong style={{color:THEMES[theme].tx}}>Astuce iPhone</strong> — Programmez votre réveil iOS à la même heure. Quand il sonne et que vous le coupez, ouvrez Sunrise pour lancer votre briefing. Une future version s'intégrera directement via les Raccourcis iOS.
-        </div>
-        {btn(`C'est parti${name?", "+name:""} ! 🌅`,finish,true)}
-      </div>
-    </div>
-  );
+function Switch({on,onToggle}){
+  return <button onClick={onToggle} style={{width:40,height:22,borderRadius:11,background:on?D.accent:D.surface,border:`1px solid ${on?D.accent:D.border}`,position:"relative",transition:"all .2s",cursor:"pointer",padding:0,flexShrink:0}}>
+    <div style={{width:16,height:16,borderRadius:8,background:on?"#000":D.text3,position:"absolute",top:2,left:on?22:2,transition:"all .2s"}}/>
+  </button>;
 }
 
-// ━━━ MAIN APP ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-export default function SunriseApp(){
+function useClock(){const[n,s]=useState(new Date());useEffect(()=>{const id=setInterval(()=>s(new Date()),1000);return()=>clearInterval(id)},[]);return n}
+
+// ━━━ APP ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export default function App(){
+  // Single config object — fixes onboarding bug
+  const[cfg,setCfg]=useState(null);
+  const[scr,setScr]=useState("onboard");
+  const[obStep,setObStep]=useState(0);
+
+  // Onboarding temp state
+  const[obName,setObName]=useState("");
+  const[obCity,setObCity]=useState("Paris");
+  const[obAw,setObAw]=useState("07:00");
+  const[obAwe,setObAwe]=useState("09:00");
+  const[obProf,setObProf]=useState(null);
+  const[obPdj,setObPdj]=useState([0,1,3]);
+  const[obCustomPdj,setObCustomPdj]=useState([]);
+  const[obNewPdj,setObNewPdj]=useState("");
+
+  // App state (post-onboarding)
   const now=useClock();
-  const[setup,setSetup]=useState(null);
-  const[scr,setScr]=useState("home");
-  const[theme,setTheme]=useState("minuit");
-  const[city,setCity]=useState("Paris");
-  const[userName,setUserName]=useState("");
-  const[selVoice,setSelVoice]=useState(null);
-  const[voices,setVoices]=useState([]);
-  const[aWeek,setAWeek]=useState("07:00");
-  const[aWE,setAWE]=useState("09:00");
+  const[plugs,setPlugs]=useState([]);
+  const[order,setOrder]=useState([]);
+  const[radio,setRadio]=useState(RADIOS[0]);
+  const[rMin,setRMin]=useState(15);
+  const[mood,setMood]=useState("💪");
+  const[wDet,setWDet]=useState({wind:true,sun:true,rain:false,hum:false});
   const[aOn,setAOn]=useState(false);
-  const[plugs,setPlugs]=useState(["meteo","agenda","petitdej"]);
-  const[order,setOrder]=useState(["meteo","agenda","petitdej"]);
-  const[selRadio,setSelRadio]=useState(RADIOS[0]);
-  const[radioMin,setRadioMin]=useState(15);
-  const[pdjFavs,setPdjFavs]=useState([0,1,3]);
-  const[mood,setMood]=useState("😊");
-  const[wDetail,setWDetail]=useState({rain:false,wind:true,sun:true,humidity:false});
-  const[briefing,setBriefing]=useState(false);
-  const[bStep,setBStep]=useState(-1);
-  const[weather,setWeather]=useState(null);
-  const[volume,setVolume]=useState(0);
-  const[streak,setStreak]=useState(0);
-  const[stab,setStab]=useState("general");
+  const[brf,setBrf]=useState(false);
+  const[bSt,setBSt]=useState(-1);
+  const[vol,setVol]=useState(0);
+  const[wx,setWx]=useState(null);
+  const[voice,setVoice]=useState(null);
+  const[voices,setVoices]=useState([]);
+  const[stab,setStab]=useState("routine");
   const audioRef=useRef(null);
-  const activeRef=useRef(false);
-  const volRef=useRef(null);
+  const actRef=useRef(false);
 
-  // Apply onboarding
-  const handleSetup=(cfg)=>{
-    setSetup(cfg);
-    setUserName(cfg.name);
-    setCity(cfg.city);
-    setAWeek(cfg.aWeek);
-    setAWE(cfg.aWE);
-    setTheme(cfg.theme);
-    setPlugs(cfg.profile.plugs);
-    setOrder(cfg.profile.plugs);
-    setSelRadio(RADIOS[cfg.profile.radioIdx]);
-    setPdjFavs(cfg.selPDJ);
-    setStreak(1);
+  // Finalize onboarding
+  const finishOnboard=()=>{
+    const prof=obProf||PROFILES[5];
+    const config={name:obName,city:obCity,aw:obAw,awe:obAwe,pdj:obPdj,customPdj:obCustomPdj};
+    setCfg(config);
+    setPlugs(prof.plugs);
+    setOrder(prof.plugs);
+    setRadio(RADIOS[prof.radio]);
+    setScr("home");
   };
 
-  if(!setup) return <Onboarding onComplete={handleSetup}/>;
+  // Custom PDJ add with calorie estimate
+  const addCustomPdj=()=>{
+    if(!obNewPdj.trim())return;
+    const est=estimateCal(obNewPdj);
+    const np={id:100+obCustomPdj.length,n:obNewPdj.trim(),cal:est.cal,prot:est.prot,d:est.note,e:"—",custom:true};
+    setObCustomPdj(c=>[...c,np]);
+    setObPdj(p=>[...p,np.id]);
+    setObNewPdj("");
+  };
 
-  const T=THEMES[theme];
-  const isWE=[0,6].includes(now.getDay());
-  const alarm=isWE?aWE:aWeek;
-  const hhmm=now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-  const secs=now.getSeconds().toString().padStart(2,"0");
-  const dateStr=now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
-  const di=now.getDay();
-  const todayPDJ=pdjFavs.length>0?PETITDEJ[pdjFavs[di%pdjFavs.length]]:PETITDEJ[0];
-  const todayCit=(MOOD_CIT[mood]||MOOD_CIT["😊"])[0];
-  const smartAgenda=AGENDA.filter(e=>e.prio==="high");
+  // Post-onboard custom PDJ
+  const addCustomPdjSettings=()=>{
+    if(!obNewPdj.trim())return;
+    const est=estimateCal(obNewPdj);
+    const np={id:100+(cfg?.customPdj||[]).length+obCustomPdj.length,n:obNewPdj.trim(),cal:est.cal,prot:est.prot,d:est.note,e:"—",custom:true};
+    setCfg(c=>({...c,customPdj:[...(c.customPdj||[]),np],pdj:[...(c.pdj||[]),np.id]}));
+    setObNewPdj("");
+  };
+
+  const allPdj=[...DEF_PDJ,...(cfg?.customPdj||obCustomPdj)];
+
+  // Weather
+  const city=cfg?.city||obCity;
+  useEffect(()=>{
+    if(!city)return;
+    fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr`).then(r=>r.json()).then(g=>{
+      if(!g.results?.[0])throw 0;const{latitude:la,longitude:lo}=g.results[0];
+      return fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&current=temperature_2m,weathercode,windspeed_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum&timezone=auto&forecast_days=1`).then(r=>r.json()).then(d=>setWx(d));
+    }).catch(()=>setWx(null));
+  },[city]);
 
   useEffect(()=>{const l=()=>setVoices((window.speechSynthesis?.getVoices()||[]).filter(v=>v.lang.startsWith("fr")||v.lang.startsWith("en")));l();window.speechSynthesis?.addEventListener("voiceschanged",l);return()=>window.speechSynthesis?.removeEventListener("voiceschanged",l)},[]);
 
-  useEffect(()=>{
-    fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr`).then(r=>r.json()).then(g=>{
-      if(!g.results?.[0])throw 0;
-      const{latitude:la,longitude:lo}=g.results[0];
-      return fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&current=temperature_2m,weathercode,windspeed_10m,relative_humidity_2m,precipitation&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum&timezone=auto&forecast_days=1`).then(r=>r.json()).then(d=>setWeather(d));
-    }).catch(()=>setWeather(null));
-  },[city]);
+  const isWE=cfg?[0,6].includes(now.getDay()):false;
+  const al=cfg?(isWE?cfg.awe:cfg.aw):"07:00";
+  const hhmm=now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  const secs=now.getSeconds().toString().padStart(2,"0");
+  const dStr=now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  const favPdj=(cfg?.pdj||[]).map(id=>allPdj.find(p=>p.id===id)).filter(Boolean);
+  const todayPDJ=favPdj[now.getDay()%Math.max(1,favPdj.length)]||DEF_PDJ[0];
+  const smartAg=AGENDA.filter(e=>e.p==="high");
 
-  useEffect(()=>{if(aOn&&hhmm===alarm&&!briefing)startBriefing()},[hhmm,aOn]);
-  useEffect(()=>{if(!briefing)return;const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;const r=new SR();r.lang="fr-FR";r.continuous=true;r.onresult=(e)=>{const t=Array.from(e.results).slice(-1)[0]?.[0]?.transcript?.toLowerCase()||"";if(t.includes("stop")||t.includes("arrête"))stopB()};try{r.start()}catch(e){}return()=>{try{r.stop()}catch(e){}}},[briefing]);
+  const wI=c=>c<=1?"☀️":c<=3?"⛅":c<=48?"🌫️":c<=67?"🌧️":c<=77?"🌨️":c<=86?"🌦️":"⛈️";
+  const wD=c=>c<=1?"Dégagé":c<=3?"Nuageux":c<=48?"Brouillard":c<=67?"Pluie":c<=77?"Neige":c<=86?"Averses":"Orage";
 
-  const wI=(c)=>c<=1?"☀️":c<=3?"⛅":c<=48?"🌫️":c<=67?"🌧️":c<=77?"🌨️":c<=86?"🌦️":"⛈️";
-  const wD=(c)=>c<=1?"ciel dégagé":c<=3?"nuageux":c<=48?"brouillard":c<=67?"pluie":c<=77?"neige":c<=86?"averses":"orage";
+  const say=(t,v=1)=>new Promise(r=>{if(!window.speechSynthesis){r();return}const u=new SpeechSynthesisUtterance(t);u.lang=voice?.lang||"fr-FR";if(voice?.native)u.voice=voice.native;u.rate=0.92;u.volume=Math.min(1,v);u.onend=r;u.onerror=r;window.speechSynthesis.speak(u)});
 
-  const say=(text,vol=1)=>new Promise(res=>{
-    if(!window.speechSynthesis){res();return}
-    const u=new SpeechSynthesisUtterance(text);u.lang=selVoice?.lang||"fr-FR";
-    if(selVoice?.native)u.voice=selVoice.native;u.rate=0.92;u.pitch=1.02;u.volume=Math.min(1,vol);
-    u.onend=res;u.onerror=res;window.speechSynthesis.speak(u);
-  });
+  // Auto alarm check
+  useEffect(()=>{if(aOn&&cfg&&hhmm===al&&!brf)startB()},[hhmm,aOn,cfg]);
+  useEffect(()=>{if(!brf)return;const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;const r=new SR();r.lang="fr-FR";r.continuous=true;r.onresult=e=>{const t=Array.from(e.results).slice(-1)[0]?.[0]?.transcript?.toLowerCase()||"";if(t.includes("stop")||t.includes("arrête"))stopB()};try{r.start()}catch(e){}return()=>{try{r.stop()}catch(e){}}},[brf]);
 
-  // Progressive volume briefing
-  const startBriefing=async()=>{
-    setBriefing(true);setScr("briefing");setBStep(0);activeRef.current=true;setAOn(false);
-    const active=order.filter(id=>plugs.includes(id));
-    const greet=isWE?"Bon week-end":"Bonne journée";
-    // Progressive volume: start at 30%, ramp to 100%
-    const totalSteps=active.length+1;
-    let vol=0.3;
-    const volStep=(1-0.3)/totalSteps;
+  const startB=async()=>{
+    setBrf(true);setScr("briefing");setBSt(0);actRef.current=true;setAOn(false);
+    const act=order.filter(id=>plugs.includes(id));
+    let v=0.2;const vs=(1-0.2)/(act.length+1);
+    await say(`Bonjour${cfg?.name?", "+cfg.name:""}. Il est ${al.replace(":"," heures ")}. ${isWE?"Bon week-end.":"Bonne journée."}`,v);
+    v+=vs;setVol(Math.round(v*100));
 
-    await say(`Bonjour${userName?", "+userName:""}. Il est ${alarm.replace(":"," heures ")}. ${greet}.`,vol);
-    vol+=volStep; setVolume(Math.round(vol*100));
-
-    for(let i=0;i<active.length;i++){
-      if(!activeRef.current)return;setBStep(i);vol=Math.min(1,0.3+volStep*(i+1));setVolume(Math.round(vol*100));
-      const p=active[i];
-      if(p==="meteo"&&weather){const c=weather.current,d=weather.daily;let t=`Météo à ${city}: ${Math.round(c.temperature_2m)} degrés, ${wD(c.weathercode)}. Max ${Math.round(d.temperature_2m_max[0])}, min ${Math.round(d.temperature_2m_min[0])}.`;if(wDetail.wind)t+=` Vent ${c.windspeed_10m} km/h.`;if(wDetail.sun&&d.sunrise)t+=` Lever ${d.sunrise[0]?.split("T")[1]}.`;await say(t,vol)}
-      if(p==="news"){await say("Les titres.",vol);for(const n of MOCK_NEWS.slice(0,2)){if(!activeRef.current)return;await say(n.t,vol)}}
-      if(p==="agenda"){if(smartAgenda.length===0)await say("Rien d'urgent.",vol);else{await say(`${smartAgenda.length} rendez-vous importants.`,vol);for(const e of smartAgenda.slice(0,3)){if(!activeRef.current)return;await say(`${e.time}, ${e.title}.`,vol)}}}
-      if(p==="yoga")await say("Yoga du matin sur votre écran.",vol);
-      if(p==="sport")await say("Votre séance sport est prête.",vol);
-      if(p==="petitdej")await say(`${todayPDJ.name}, ${todayPDJ.cal} calories, ${todayPDJ.prot} grammes de protéines. ${todayPDJ.energy}.`,vol);
-      if(p==="citation")await say(todayCit,vol);
-      if(p==="podcast")await say("Podcast prêt.",vol);
-      if(p==="spotify")await say("Ouvrez Spotify.",vol);
-      if(p==="radio"){await say(`${selRadio.name}.`,vol);try{audioRef.current=new Audio(selRadio.url);audioRef.current.volume=vol;audioRef.current.play();if(radioMin>0)setTimeout(()=>{audioRef.current?.pause()},radioMin*60000)}catch(e){}}
+    for(let i=0;i<act.length;i++){
+      if(!actRef.current)return;setBSt(i);v=Math.min(1,0.2+vs*(i+1));setVol(Math.round(v*100));
+      const p=act[i];
+      if(p==="meteo"&&wx){const c=wx.current,d=wx.daily;let t=`${city}: ${Math.round(c.temperature_2m)} degrés, ${wD(c.weathercode).toLowerCase()}. Max ${Math.round(d.temperature_2m_max[0])}, min ${Math.round(d.temperature_2m_min[0])}.`;if(wDet.wind)t+=` Vent ${c.windspeed_10m} km/h.`;if(wDet.sun&&d.sunrise)t+=` Lever ${d.sunrise[0]?.split("T")[1]}.`;await say(t,v)}
+      if(p==="news"){for(const n of NEWS.slice(0,2)){if(!actRef.current)return;await say(n.t,v)}}
+      if(p==="agenda"){if(smartAg.length>0)for(const e of smartAg.slice(0,3)){if(!actRef.current)return;await say(`${e.t}, ${e.n}.`,v)}}
+      if(p==="petitdej")await say(`${todayPDJ.n}. ${todayPDJ.cal} calories.`,v);
+      if(p==="citation")await say(CITS[mood]||CITS["💪"],v);
+      if(p==="yoga")await say("Séance yoga sur l'écran.",v);
+      if(p==="sport")await say("Séance sport prête.",v);
+      if(p==="podcast")await say("Podcast prêt.",v);
+      if(p==="spotify")await say("Spotify.",v);
+      if(p==="radio"){await say(`${radio.n}.`,v);try{audioRef.current=new Audio(radio.u);audioRef.current.volume=v;audioRef.current.play();if(rMin>0)setTimeout(()=>audioRef.current?.pause(),rMin*60000)}catch(e){}}
+      await new Promise(r=>setTimeout(r,500));
     }
-    if(activeRef.current){setVolume(100);await say("Briefing terminé. Excellente journée.",1)}
+    if(actRef.current){setVol(100);await say("Briefing terminé.",1)}
   };
+  const stopB=()=>{actRef.current=false;window.speechSynthesis?.cancel();if(audioRef.current){audioRef.current.pause();audioRef.current=null}setBrf(false);setBSt(-1);setVol(0)};
+  const togP=id=>{setPlugs(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);setOrder(o=>o.includes(id)?o:[...o,id])};
+  const movP=(id,dir)=>{setOrder(o=>{const i=o.indexOf(id);if(i<0)return o;const j=i+dir;if(j<0||j>=o.length)return o;const n=[...o];[n[i],n[j]]=[n[j],n[i]];return n})};
 
-  const stopB=()=>{activeRef.current=false;window.speechSynthesis?.cancel();if(audioRef.current){audioRef.current.pause();audioRef.current=null}setBriefing(false);setBStep(-1);setVolume(0)};
-  const toggleP=(id)=>{setPlugs(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);setOrder(o=>o.includes(id)?o:[...o,id])};
-  const moveP=(id,dir)=>{setOrder(o=>{const i=o.indexOf(id);if(i<0)return o;const j=i+dir;if(j<0||j>=o.length)return o;const n=[...o];[n[i],n[j]]=[n[j],n[i]];return n})};
+  // ━━━ ONBOARDING ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if(scr==="onboard"){
+    const obAllPdj=[...DEF_PDJ,...obCustomPdj];
+    const dots=<div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:32}}>{[0,1,2,3].map(i=><div key={i} style={{width:i===obStep?20:6,height:6,borderRadius:3,background:i<=obStep?D.accent:D.border,transition:"all .3s"}}/>)}</div>;
 
-  const cd={background:T.card,border:`1px solid ${T.cb}`,borderRadius:14,padding:"12px 14px",backdropFilter:"blur(16px)"};
-  const tg={display:"inline-block",background:T.ac+"18",color:T.ac,borderRadius:20,padding:"3px 9px",fontSize:10,fontWeight:700,letterSpacing:.6,textTransform:"uppercase"};
-  const sec={fontSize:10,fontWeight:700,color:T.mu,letterSpacing:1.2,textTransform:"uppercase",marginBottom:8};
-  const pg={minHeight:"100vh",background:T.bg,fontFamily:"'Outfit',sans-serif",color:T.tx,maxWidth:430,margin:"0 auto"};
-  const pad={padding:"16px 18px calc(env(safe-area-inset-bottom,16px)+16px)"};
+    // Step 0: Welcome
+    if(obStep===0) return(
+      <div style={page}><style>{CSS}</style>
+        <div style={{...pad,flex:1,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",minHeight:"100vh",animation:"fadeIn .8s"}}>
+          <div style={{width:64,height:64,borderRadius:32,background:D.accentSoft,border:`1px solid ${D.accentBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,marginBottom:24}}>☀</div>
+          <div style={{fontSize:28,fontWeight:200,letterSpacing:-1,marginBottom:8}}>Sunrise</div>
+          <div style={{fontSize:14,color:D.text2,textAlign:"center",lineHeight:1.7,marginBottom:40,maxWidth:260}}>Votre briefing matinal vocal.<br/>Personnalisé. Progressif. Mains libres.</div>
+          <Btn onClick={()=>setObStep(1)} primary>Configurer mon réveil</Btn>
+        </div>
+      </div>
+    );
+
+    // Step 1: Identity
+    if(obStep===1) return(
+      <div style={page}><style>{CSS}</style>
+        <div style={{...pad,minHeight:"100vh",animation:"fadeIn .5s"}}>
+          <div style={{marginTop:40,marginBottom:20}}>{dots}</div>
+          <div style={{fontSize:20,fontWeight:300,marginBottom:28}}>Qui êtes-vous ?</div>
+          <div style={{marginBottom:20}}>
+            <div style={label}>Prénom</div>
+            <input value={obName} onChange={e=>setObName(e.target.value)} placeholder="Optionnel" style={{width:"100%",...card,color:D.text,fontSize:16,fontFamily:"inherit",outline:"none"}} autoFocus/>
+          </div>
+          <div style={{marginBottom:20}}>
+            <div style={label}>Ville</div>
+            <input value={obCity} onChange={e=>setObCity(e.target.value)} style={{width:"100%",...card,color:D.text,fontSize:16,fontFamily:"inherit",outline:"none"}}/>
+          </div>
+          <div style={{marginBottom:28}}>
+            <div style={label}>Heure de réveil</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {[["Semaine",obAw,setObAw],["Week-end",obAwe,setObAwe]].map(([l,v,f])=>(
+                <div key={l} style={card}><div style={{fontSize:10,color:D.text3,fontWeight:600,marginBottom:6}}>{l}</div>
+                  <input type="time" value={v} onChange={e=>f(e.target.value)} style={{width:"100%",background:"transparent",border:`1px solid ${D.border}`,borderRadius:8,padding:8,color:D.text,fontSize:22,fontWeight:200,fontFamily:"inherit",textAlign:"center",outline:"none"}}/></div>
+              ))}
+            </div>
+          </div>
+          <Btn onClick={()=>setObStep(2)} primary>Continuer</Btn>
+        </div>
+      </div>
+    );
+
+    // Step 2: Profile
+    if(obStep===2) return(
+      <div style={page}><style>{CSS}</style>
+        <div style={{...pad,minHeight:"100vh",animation:"fadeIn .5s",overflow:"auto"}}>
+          <div style={{marginTop:40,marginBottom:20}}>{dots}</div>
+          <div style={{fontSize:20,fontWeight:300,marginBottom:6}}>Type de matin</div>
+          <div style={{fontSize:13,color:D.text2,marginBottom:20}}>Pré-configure vos plugins. Modifiable ensuite.</div>
+          {PROFILES.map((p,i)=>(
+            <button key={p.id} onClick={()=>setObProf(p)} style={{...cardHi(obProf?.id===p.id),width:"100%",display:"flex",alignItems:"center",gap:14,marginBottom:8,cursor:"pointer",fontFamily:"inherit",color:D.text,textAlign:"left",animation:`slideIn .3s ease ${i*.04}s both`}}>
+              <div style={{width:36,height:36,borderRadius:18,background:obProf?.id===p.id?D.accentSoft:D.surface,border:`1px solid ${obProf?.id===p.id?D.accentBorder:D.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:obProf?.id===p.id?D.accent:D.text3,fontWeight:700,flexShrink:0}}>{p.icon}</div>
+              <div style={{flex:1}}><div style={{fontSize:15,fontWeight:500}}>{p.label}</div><div style={{fontSize:12,color:D.text2,marginTop:2}}>{p.sub}</div></div>
+              {obProf?.id===p.id&&<div style={{color:D.accent,fontSize:16}}>✓</div>}
+            </button>
+          ))}
+          <div style={{marginTop:12}}><Btn onClick={()=>setObStep(3)} primary disabled={!obProf}>Continuer</Btn></div>
+        </div>
+      </div>
+    );
+
+    // Step 3: Breakfast + finish
+    if(obStep===3) return(
+      <div style={page}><style>{CSS}</style>
+        <div style={{...pad,minHeight:"100vh",animation:"fadeIn .5s",overflow:"auto",paddingBottom:40}}>
+          <div style={{marginTop:40,marginBottom:20}}>{dots}</div>
+          <div style={{fontSize:20,fontWeight:300,marginBottom:6}}>Petit-déjeuner</div>
+          <div style={{fontSize:13,color:D.text2,marginBottom:18}}>Sélectionnez ou ajoutez vos recettes. Les calories sont estimées automatiquement.</div>
+
+          {obAllPdj.map(p=>{const on=obPdj.includes(p.id);return(
+            <button key={p.id} onClick={()=>setObPdj(x=>on?x.filter(v=>v!==p.id):[...x,p.id])} style={{...cardHi(on),width:"100%",display:"flex",alignItems:"center",gap:12,marginBottom:6,cursor:"pointer",fontFamily:"inherit",color:D.text}}>
+              <div style={{flex:1,textAlign:"left"}}>
+                <div style={{fontSize:14,fontWeight:500}}>{p.n}</div>
+                <div style={{fontSize:11,color:D.text2,marginTop:2}}>{p.d}</div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:16,fontWeight:200,color:D.accent}}>{p.cal}</div>
+                <div style={{fontSize:9,color:D.text3}}>kcal{p.prot>0?` · ${p.prot}g P`:""}</div>
+              </div>
+              <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${on?D.accent:D.border}`,background:on?D.accent:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{on&&<span style={{color:"#000",fontSize:10,fontWeight:700}}>✓</span>}</div>
+            </button>
+          )})}
+
+          <div style={{marginTop:14,marginBottom:6}}>
+            <div style={{...label,marginBottom:6}}>Ajouter une recette</div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={obNewPdj} onChange={e=>setObNewPdj(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCustomPdj()} placeholder="Ex: Tartine beurre confiture, Pancakes banane…" style={{flex:1,...card,color:D.text,fontSize:13,fontFamily:"inherit",outline:"none",padding:"10px 14px"}}/>
+              <button onClick={addCustomPdj} style={{background:D.accent,border:"none",borderRadius:D.radius,padding:"10px 18px",color:D.bg,fontWeight:700,fontSize:16,cursor:"pointer",fontFamily:"inherit"}}>+</button>
+            </div>
+            <div style={{fontSize:11,color:D.text3,marginTop:6}}>Les calories sont estimées automatiquement à partir des ingrédients mentionnés.</div>
+          </div>
+
+          <div style={{marginTop:20}}><Btn onClick={finishOnboard} primary disabled={obPdj.length===0}>Lancer Sunrise</Btn></div>
+        </div>
+      </div>
+    );
+  }
 
   // ━━━ BRIEFING ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   if(scr==="briefing"){
-    const active=order.filter(id=>plugs.includes(id));
-    const cur=active[bStep]||active[0];
+    const act=order.filter(id=>plugs.includes(id));
+    const cur=act[bSt]||act[0];
     return(
-      <div style={pg}><style>{CSS}</style>
+      <div style={page}><style>{CSS}</style>
         <div style={{...pad,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
-          <ClockFace time={hhmm} T={T}/>
-          <div style={{textAlign:"center",fontSize:11,color:T.mu,marginTop:4,marginBottom:14,textTransform:"capitalize"}}>{dateStr}</div>
-
-          {/* Volume bar */}
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <span style={{fontSize:11,color:T.mu}}>🔊</span>
-            <div style={{flex:1,height:3,borderRadius:2,background:T.card}}>
-              <div style={{height:3,borderRadius:2,background:T.ac,width:volume+"%",transition:"width .5s"}}/>
-            </div>
-            <span style={{fontSize:10,color:T.mu,minWidth:28,textAlign:"right"}}>{volume}%</span>
+          {/* Time */}
+          <div style={{textAlign:"center",marginBottom:12}}>
+            <div style={{fontSize:52,fontWeight:100,letterSpacing:-3,color:D.accent,animation:"breathe 4s ease infinite"}}>{hhmm}</div>
+            <div style={{fontSize:12,color:D.text3,textTransform:"capitalize",marginTop:2}}>{dStr}</div>
           </div>
 
-          <button onClick={stopB} style={{background:"rgba(220,50,50,0.08)",border:"1px solid rgba(220,50,50,0.15)",borderRadius:12,padding:11,color:"#e05555",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            <span style={{width:7,height:7,borderRadius:"50%",background:"#e05555",animation:"pu 1s infinite"}}/>STOP
+          {/* Volume */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{flex:1,height:2,borderRadius:1,background:D.surface}}><div style={{height:2,borderRadius:1,background:D.accent,width:vol+"%",transition:"width .5s"}}/></div>
+            <span style={{fontSize:10,color:D.text3,minWidth:28}}>{vol}%</span>
+          </div>
+
+          {/* Stop */}
+          <button onClick={stopB} style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:D.radius,padding:12,color:D.red,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:.3}}>
+            <span style={{width:6,height:6,borderRadius:3,background:D.red,animation:"pulse 1s infinite"}}/>STOP
           </button>
 
-          <div style={{display:"flex",gap:2,marginBottom:8}}>{active.map((_,i)=><div key={i} style={{flex:1,height:2,borderRadius:1,background:i<=bStep?T.ac:T.card,transition:"background .3s"}}/>)}</div>
-          <div style={{display:"flex",gap:4,overflowX:"auto",marginBottom:12,paddingBottom:2}}>{active.map((pid,i)=>{const pl=ALL_PLUGINS.find(p=>p.id===pid);return<span key={pid} style={{...tg,opacity:i===bStep?1:.3,flexShrink:0}}>{pl?.icon} {pl?.name}</span>})}</div>
+          {/* Steps */}
+          <div style={{display:"flex",gap:2,marginBottom:12}}>{act.map((_,i)=><div key={i} style={{flex:1,height:2,borderRadius:1,background:i<=bSt?D.accent:D.surface,transition:"background .3s"}}/>)}</div>
 
-          <div style={{flex:1,overflow:"auto",WebkitOverflowScrolling:"touch"}}>
-            {cur==="meteo"&&weather&&<div style={{...cd,animation:"fu .5s",textAlign:"center"}}><span style={{fontSize:48}}>{wI(weather.current.weathercode)}</span><div style={{fontSize:38,fontWeight:100,margin:"6px 0",color:T.clock}}>{Math.round(weather.current.temperature_2m)}°C</div><div style={{color:T.mu,fontSize:13}}>{wD(weather.current.weathercode)}</div><div style={{display:"flex",justifyContent:"center",gap:14,marginTop:10,fontSize:12,color:T.mu,flexWrap:"wrap"}}><span>↑{Math.round(weather.daily.temperature_2m_max[0])}°</span><span>↓{Math.round(weather.daily.temperature_2m_min[0])}°</span>{wDetail.wind&&<span>💨{weather.current.windspeed_10m}</span>}</div>{wDetail.sun&&weather.daily.sunrise&&<div style={{marginTop:6,fontSize:11,color:T.mu}}>🌅 {weather.daily.sunrise[0]?.split("T")[1]} — 🌇 {weather.daily.sunset[0]?.split("T")[1]}</div>}</div>}
-            {cur==="news"&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{MOCK_NEWS.map((n,i)=><a key={i} href={n.u} target="_blank" rel="noopener noreferrer" style={{...cd,textDecoration:"none",color:T.tx,animation:`sl .3s ease ${i*.06}s both`}}><span style={tg}>{n.c}</span><div style={{fontSize:13,fontWeight:600,marginTop:5,lineHeight:1.3}}>{n.t} ↗</div></a>)}</div>}
-            {cur==="agenda"&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{smartAgenda.length===0?<div style={{...cd,textAlign:"center",color:T.mu}}>Rien d'urgent</div>:smartAgenda.map((ev,i)=><div key={i} style={{...cd,borderLeft:`3px solid ${ev.col}`,display:"flex",alignItems:"center",gap:12,animation:`sl .3s ease ${i*.06}s both`}}><span style={{fontSize:13,fontWeight:700,color:T.ac,minWidth:36}}>{ev.time}</span><span style={{fontSize:13,fontWeight:500}}>{ev.title}</span></div>)}</div>}
-            {cur==="petitdej"&&<div style={{...cd,animation:"fu .5s"}}><div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><span style={{fontSize:36}}>{todayPDJ.icon}</span><div style={{flex:1}}><div style={{fontSize:17,fontWeight:600}}>{todayPDJ.name}</div><div style={{fontSize:12,color:T.mu,marginTop:2}}>{todayPDJ.desc}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:24,fontWeight:100,color:T.clock}}>{todayPDJ.cal}</div><div style={{fontSize:9,color:T.mu,fontWeight:700}}>KCAL</div></div></div><div style={{display:"flex",gap:10,fontSize:12,color:T.mu}}><span style={{color:"#e07070"}}>P {todayPDJ.prot}g</span><span>⚡ {todayPDJ.energy}</span></div></div>}
-            {cur==="citation"&&<div style={{...cd,animation:"fu .5s",textAlign:"center",padding:"20px 16px"}}><span style={{fontSize:24}}>{mood}</span><div style={{fontSize:14,lineHeight:1.6,fontStyle:"italic",fontWeight:300,marginTop:8}}>{todayCit}</div></div>}
-            {cur==="radio"&&<div style={{...cd,animation:"fu .5s",textAlign:"center"}}><span style={{fontSize:32}}>📻</span><div style={{fontSize:17,fontWeight:600,marginTop:6}}>{selRadio.name}</div><div style={{...tg,marginTop:6}}>● {radioMin}min</div></div>}
-            {["yoga","sport","podcast","spotify"].includes(cur)&&<div style={{...cd,animation:"fu .5s",textAlign:"center"}}><span style={{fontSize:36}}>{ALL_PLUGINS.find(p=>p.id===cur)?.icon}</span><div style={{fontSize:17,fontWeight:600,marginTop:8}}>{ALL_PLUGINS.find(p=>p.id===cur)?.name}</div></div>}
+          <div style={{flex:1,overflow:"auto"}}>
+            {cur==="meteo"&&wx&&<div style={{...card,animation:"fadeIn .4s",textAlign:"center"}}><div style={{fontSize:42,fontWeight:100,color:D.accent,margin:"8px 0"}}>{Math.round(wx.current.temperature_2m)}°</div><div style={{color:D.text2,fontSize:14}}>{wD(wx.current.weathercode)}</div><div style={{display:"flex",justifyContent:"center",gap:16,marginTop:12,fontSize:12,color:D.text3}}><span>↑{Math.round(wx.daily.temperature_2m_max[0])}°</span><span>↓{Math.round(wx.daily.temperature_2m_min[0])}°</span>{wDet.wind&&<span>{wx.current.windspeed_10m} km/h</span>}</div>{wDet.sun&&wx.daily.sunrise&&<div style={{marginTop:8,fontSize:11,color:D.text3}}>{wx.daily.sunrise[0]?.split("T")[1]} — {wx.daily.sunset[0]?.split("T")[1]}</div>}</div>}
+
+            {cur==="news"&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{NEWS.map((n,i)=><a key={i} href={n.u} target="_blank" rel="noopener noreferrer" style={{...card,textDecoration:"none",color:D.text,animation:`slideIn .3s ease ${i*.05}s both`}}><div style={{fontSize:14,fontWeight:500,lineHeight:1.4}}>{n.t}</div><div style={{fontSize:11,color:D.text3,marginTop:4}}>{n.s} →</div></a>)}</div>}
+
+            {cur==="agenda"&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{smartAg.map((e,i)=><div key={i} style={{...card,display:"flex",alignItems:"center",gap:12,animation:`slideIn .3s ease ${i*.05}s both`}}><span style={{fontSize:13,fontWeight:600,color:D.accent,minWidth:36}}>{e.t}</span><span style={{fontSize:14,fontWeight:400}}>{e.n}</span></div>)}</div>}
+
+            {cur==="petitdej"&&<div style={{...card,animation:"fadeIn .4s"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:17,fontWeight:500}}>{todayPDJ.n}</div><div style={{fontSize:12,color:D.text2,marginTop:4}}>{todayPDJ.d}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:26,fontWeight:100,color:D.accent}}>{todayPDJ.cal}</div><div style={{fontSize:10,color:D.text3}}>kcal{todayPDJ.prot>0?` · ${todayPDJ.prot}g`:""}</div></div></div></div>}
+
+            {cur==="citation"&&<div style={{...card,animation:"fadeIn .4s",textAlign:"center",padding:"28px 20px"}}><div style={{fontSize:15,lineHeight:1.7,fontWeight:300,fontStyle:"italic"}}>{CITS[mood]}</div></div>}
+
+            {cur==="radio"&&<div style={{...card,animation:"fadeIn .4s",textAlign:"center"}}><div style={{fontSize:18,fontWeight:500,marginBottom:4}}>{radio.n}</div><div style={{fontSize:11,color:D.accent}}>En direct · {rMin} min</div></div>}
+
+            {["yoga","sport","podcast","spotify"].includes(cur)&&<div style={{...card,animation:"fadeIn .4s",textAlign:"center"}}><div style={{fontSize:17,fontWeight:500,marginBottom:8}}>{PLUGS.find(p=>p.id===cur)?.label}</div><div style={{fontSize:13,color:D.text2,marginBottom:12}}>{cur==="sport"||cur==="yoga"?"Ouvrez votre app pour commencer.":"Prêt à lancer."}</div><a href={cur==="spotify"?"https://open.spotify.com":"#"} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:D.accent,color:D.bg,borderRadius:10,padding:"10px 28px",fontSize:14,fontWeight:600,textDecoration:"none"}}>Ouvrir</a></div>}
           </div>
-          <button onClick={()=>{stopB();setScr("home")}} style={{marginTop:8,background:T.card,border:`1px solid ${T.cb}`,borderRadius:10,padding:9,color:T.mu,fontSize:12,cursor:"pointer",fontFamily:"inherit",textAlign:"center"}}>← Accueil</button>
+
+          <button onClick={()=>{stopB();setScr("home")}} style={{marginTop:10,...card,color:D.text3,fontSize:12,cursor:"pointer",fontFamily:"inherit",textAlign:"center",padding:10}}>Retour</button>
         </div>
       </div>
     );
@@ -403,149 +398,142 @@ export default function SunriseApp(){
 
   // ━━━ SETTINGS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   if(scr==="settings"){
-    const STABS=[{id:"general",l:"Général"},{id:"plugins",l:"Plugins"},{id:"petitdej_s",l:"Petit-déj"},{id:"media_s",l:"Médias"},{id:"look",l:"Apparence"}];
+    const tabs=[{id:"routine",l:"Routine"},{id:"pdj",l:"Petit-déj"},{id:"media",l:"Médias"},{id:"prefs",l:"Préférences"}];
     return(
-      <div style={pg}><style>{CSS}</style>
+      <div style={page}><style>{CSS}</style>
         <div style={{...pad,paddingBottom:40}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-            <button onClick={()=>setScr("home")} style={{background:"none",border:"none",color:T.ac,fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:0}}>← Retour</button>
-            <span style={{fontSize:17,fontWeight:600}}>Réglages</span>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <button onClick={()=>setScr("home")} style={{background:"none",border:"none",color:D.accent,fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:0}}>← Retour</button>
+            <span style={{fontSize:16,fontWeight:500}}>Réglages</span>
           </div>
-          <div style={{display:"flex",gap:3,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
-            {STABS.map(t=><button key={t.id} onClick={()=>setStab(t.id)} style={{background:stab===t.id?T.ac+"18":T.card,border:`1px solid ${stab===t.id?T.ac+"44":T.cb}`,borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:stab===t.id?700:400,color:stab===t.id?T.ac:T.mu,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{t.l}</button>)}
+          <div style={{display:"flex",gap:4,marginBottom:18}}>
+            {tabs.map(t=><button key={t.id} onClick={()=>setStab(t.id)} style={{background:stab===t.id?D.accentSoft:D.surface,border:`1px solid ${stab===t.id?D.accentBorder:D.border}`,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:stab===t.id?600:400,color:stab===t.id?D.accent:D.text3,cursor:"pointer",fontFamily:"inherit"}}>{t.l}</button>)}
           </div>
 
-          {stab==="general"&&(<>
-            <div style={{marginBottom:18}}><div style={sec}>⏰ Réveil</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{[["Semaine",aWeek,setAWeek],["Week-end",aWE,setAWE]].map(([l,v,s])=><div key={l} style={cd}><div style={{fontSize:9,color:T.mu,fontWeight:700,letterSpacing:1,marginBottom:4}}>{l.toUpperCase()}</div><input type="time" value={v} onChange={e=>s(e.target.value)} style={{width:"100%",background:"transparent",border:`1px solid ${T.cb}`,borderRadius:8,padding:6,color:T.tx,fontSize:18,fontWeight:300,fontFamily:"inherit",textAlign:"center"}}/></div>)}</div></div>
-            <div style={{marginBottom:18}}><div style={sec}>📍 Ville</div><input value={city} onChange={e=>setCity(e.target.value)} style={{width:"100%",background:T.card,border:`1px solid ${T.cb}`,borderRadius:12,padding:"10px 14px",color:T.tx,fontSize:15,fontFamily:"inherit"}}/></div>
-            <div style={{marginBottom:18}}>
-              <div style={sec}>🎙️ Voix</div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {voices.length>0?voices.slice(0,6).map((v,i)=><button key={i} onClick={()=>{setSelVoice({lang:v.lang,native:v});const u=new SpeechSynthesisUtterance("Bonjour.");u.voice=v;u.lang=v.lang;window.speechSynthesis.speak(u)}} style={{...cd,cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontFamily:"inherit",color:T.tx,padding:"9px 12px",...(selVoice?.native?.name===v.name?{border:`1px solid ${T.ac}`,background:T.gw}:{})}}><span style={{fontSize:13,fontWeight:600,flex:1,textAlign:"left"}}>{v.name}</span><span style={{fontSize:10,color:T.mu}}>{v.lang}</span></button>):<div style={{color:T.mu,fontSize:12}}>Voix par défaut</div>}
-              </div>
-            </div>
-            <div style={{marginBottom:18}}>
-              <div style={sec}>💬 Humeur (citations)</div>
-              <div style={{display:"flex",gap:5}}>{MOODS.map(m=><button key={m.e} onClick={()=>setMood(m.e)} style={{...cd,flex:1,cursor:"pointer",textAlign:"center",fontFamily:"inherit",color:T.tx,padding:"8px 2px",...(mood===m.e?{border:`1px solid ${T.ac}`,background:T.gw}:{})}}><div style={{fontSize:20}}>{m.e}</div><div style={{fontSize:8,color:T.mu,marginTop:2}}>{m.l}</div></button>)}</div>
-            </div>
-            <div>
-              <div style={sec}>🌤️ Détails météo</div>
-              {[["wind","💨 Vent"],["rain","🌧️ Pluie mm"],["sun","🌅 Soleil"],["humidity","💧 Humidité"]].map(([k,l])=><div key={k} style={{...cd,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13}}>{l}</span><Toggle on={wDetail[k]} onT={()=>setWDetail(d=>({...d,[k]:!d[k]}))} T={T}/></div>)}
-            </div>
-          </>)}
-
-          {stab==="plugins"&&(()=>{
-            const cats={info:"📊 Info",media:"🎵 Médias",well:"🌿 Bien-être"};
-            const ao=order.filter(id=>plugs.includes(id));
-            return(<>
-              {ao.length>0&&<div style={{marginBottom:18}}><div style={sec}>Ordre de la routine</div>{ao.map((pid,idx)=>{const pl=ALL_PLUGINS.find(p=>p.id===pid);return<div key={pid} style={{...cd,display:"flex",alignItems:"center",gap:8,marginBottom:4}}><span style={{fontSize:9,fontWeight:700,color:T.mu,minWidth:14,textAlign:"right"}}>{idx+1}</span><span style={{fontSize:16}}>{pl?.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600}}>{pl?.name}</span><button onClick={()=>moveP(pid,-1)} style={{background:"none",border:"none",color:T.mu,fontSize:12,cursor:"pointer",padding:2,fontFamily:"inherit"}}>▲</button><button onClick={()=>moveP(pid,1)} style={{background:"none",border:"none",color:T.mu,fontSize:12,cursor:"pointer",padding:2,fontFamily:"inherit"}}>▼</button><button onClick={()=>toggleP(pid)} style={{background:"none",border:"none",color:"#c05050",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button></div>})}</div>}
-              {Object.entries(cats).map(([cat,label])=><div key={cat} style={{marginBottom:14}}><div style={sec}>{label}</div>{ALL_PLUGINS.filter(p=>p.cat===cat).map(pl=>{const on=plugs.includes(pl.id);return<div key={pl.id} style={{...cd,display:"flex",alignItems:"center",gap:10,marginBottom:4,...(on?{border:`1px solid ${T.ac}44`,background:T.gw}:{})}}><span style={{fontSize:18}}>{pl.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600}}>{pl.name}</span><Toggle on={on} onT={()=>toggleP(pl.id)} T={T}/></div>})}</div>)}
-            </>)
-          })()}
-
-          {stab==="petitdej_s"&&(
-            <div>
-              <div style={sec}>Sélectionnez vos recettes préférées</div>
-              <div style={{fontSize:12,color:T.mu,marginBottom:14}}>Elles tourneront en rotation quotidienne. Modifiez quand vous voulez.</div>
-              {PETITDEJ.map((p,i)=>{const on=pdjFavs.includes(p.id);return(
-                <button key={p.id} onClick={()=>setPdjFavs(s=>on?s.filter(x=>x!==p.id):[...s,p.id])} style={{...cd,width:"100%",display:"flex",alignItems:"center",gap:12,marginBottom:5,cursor:"pointer",fontFamily:"inherit",color:T.tx,...(on?{border:`1px solid ${T.ac}44`,background:T.gw}:{})}}>
-                  <span style={{fontSize:24}}>{p.icon}</span>
-                  <div style={{flex:1,textAlign:"left"}}>
-                    <div style={{fontSize:14,fontWeight:600}}>{p.name} <span style={{fontWeight:300,color:T.mu}}>{p.cal} kcal · P{p.prot}g</span></div>
-                    <div style={{fontSize:11,color:T.mu,marginTop:1}}>{p.desc}</div>
-                    <div style={{display:"flex",gap:4,marginTop:4}}>{p.tags.map(t=><span key={t} style={{...tg,fontSize:9,padding:"2px 7px"}}>{t}</span>)}</div>
-                  </div>
-                  <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${on?T.ac:T.cb}`,background:on?T.ac:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on&&<span style={{color:"#fff",fontSize:11}}>✓</span>}</div>
-                </button>
+          {stab==="routine"&&(<>
+            <div style={{marginBottom:16}}>
+              <div style={label}>Ordre des plugins</div>
+              {order.filter(id=>plugs.includes(id)).map((pid,idx)=>{const pl=PLUGS.find(p=>p.id===pid);return(
+                <div key={pid} style={{...card,display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:10,fontWeight:700,color:D.text3,minWidth:14}}>{idx+1}</span>
+                  <span style={{fontSize:12,color:D.accent}}>{pl?.icon}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:500}}>{pl?.label}</span>
+                  <button onClick={()=>movP(pid,-1)} style={{background:"none",border:"none",color:D.text3,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↑</button>
+                  <button onClick={()=>movP(pid,1)} style={{background:"none",border:"none",color:D.text3,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↓</button>
+                  <button onClick={()=>togP(pid)} style={{background:"none",border:"none",color:D.red,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                </div>
               )})}
             </div>
-          )}
+            {["info","media","well"].map(cat=><div key={cat} style={{marginBottom:14}}>
+              <div style={label}>{cat==="info"?"Information":cat==="media"?"Médias":"Bien-être"}</div>
+              {PLUGS.filter(p=>p.cat===cat).map(pl=>{const on=plugs.includes(pl.id);return(
+                <div key={pl.id} style={{...cardHi(on),display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                  <span style={{fontSize:13,color:on?D.accent:D.text3}}>{pl.icon}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:500}}>{pl.label}</span>
+                  <Switch on={on} onToggle={()=>togP(pl.id)}/>
+                </div>
+              )})}
+            </div>)}
+          </>)}
 
-          {stab==="media_s"&&(<>
-            <div style={{marginBottom:18}}>
-              <div style={sec}>📻 Radio</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>{RADIOS.map(r=><button key={r.name} onClick={()=>setSelRadio(r)} style={{...cd,cursor:"pointer",textAlign:"center",fontSize:11,fontWeight:600,fontFamily:"inherit",color:T.tx,padding:"10px 4px",...(selRadio.name===r.name?{border:`1px solid ${T.ac}`,background:T.gw}:{})}}>{r.name}</button>)}</div>
-              <div style={{marginTop:8,fontSize:11,color:T.mu,marginBottom:4}}>Durée d'écoute</div>
-              <div style={{display:"flex",gap:4}}>{[10,15,20,30,60].map(m=><button key={m} onClick={()=>setRadioMin(m)} style={{...cd,flex:1,cursor:"pointer",textAlign:"center",fontSize:12,fontWeight:700,fontFamily:"inherit",color:T.tx,padding:"7px 3px",...(radioMin===m?{border:`1px solid ${T.ac}`,background:T.gw}:{})}}>{m}m</button>)}</div>
+          {stab==="pdj"&&(<>
+            <div style={label}>Vos recettes</div>
+            {allPdj.map(p=>{const on=(cfg?.pdj||[]).includes(p.id);return(
+              <button key={p.id} onClick={()=>setCfg(c=>({...c,pdj:on?(c.pdj||[]).filter(v=>v!==p.id):[...(c.pdj||[]),p.id]}))} style={{...cardHi(on),width:"100%",display:"flex",alignItems:"center",gap:10,marginBottom:4,cursor:"pointer",fontFamily:"inherit",color:D.text}}>
+                <div style={{flex:1,textAlign:"left"}}><div style={{fontSize:13,fontWeight:500}}>{p.n}</div><div style={{fontSize:10,color:D.text3}}>{p.d}</div></div>
+                <div style={{fontSize:14,fontWeight:200,color:D.accent}}>{p.cal}<span style={{fontSize:9,color:D.text3}}> kcal</span></div>
+                <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${on?D.accent:D.border}`,background:on?D.accent:"transparent",flexShrink:0}}/>
+              </button>
+            )})}
+            <div style={{marginTop:14}}>
+              <div style={{...label,marginBottom:6}}>Ajouter une recette</div>
+              <div style={{display:"flex",gap:6}}>
+                <input value={obNewPdj} onChange={e=>setObNewPdj(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCustomPdjSettings()} placeholder="Pancakes banane, Tartine nutella…" style={{flex:1,...card,color:D.text,fontSize:12,fontFamily:"inherit",outline:"none",padding:"10px 14px"}}/>
+                <button onClick={addCustomPdjSettings} style={{background:D.accent,border:"none",borderRadius:D.radius,padding:"10px 16px",color:D.bg,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+</button>
+              </div>
+              <div style={{fontSize:11,color:D.text3,marginTop:6}}>Calories estimées automatiquement (beurre, pain, banane, yaourt, etc.)</div>
             </div>
           </>)}
 
-          {stab==="look"&&(
-            <div>
-              <div style={sec}>🎨 Thème</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:20}}>
-                {Object.entries(THEMES).map(([k,th])=><button key={k} onClick={()=>setTheme(k)} style={{background:th.bg2,border:theme===k?`2px solid ${th.ac}`:`1px solid ${th.cb}`,borderRadius:12,padding:"14px 3px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5,fontFamily:"inherit"}}><span style={{fontSize:20}}>{th.icon}</span><span style={{fontSize:8,fontWeight:700,color:th.tx}}>{th.name}</span></button>)}
-              </div>
-              <div style={{textAlign:"center",marginBottom:16}}><ClockFace time={alarm} T={T}/><div style={{fontSize:11,color:T.mu,marginTop:6}}>Aperçu</div></div>
-              <div style={{...cd,fontSize:12,color:T.mu,lineHeight:1.6}}>
-                💡 <strong style={{color:T.tx}}>Intégration iPhone</strong> — Programmez votre réveil iOS à la même heure ({alarm}). Quand vous le coupez, ouvrez Sunrise. Prochainement : automatisation via Raccourcis iOS.
-              </div>
+          {stab==="media"&&(<>
+            <div style={{marginBottom:16}}>
+              <div style={label}>Radio</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>{RADIOS.map(r=><button key={r.n} onClick={()=>setRadio(r)} style={{...cardHi(radio.n===r.n),cursor:"pointer",textAlign:"center",fontSize:11,fontWeight:500,fontFamily:"inherit",color:D.text,padding:"10px 4px"}}>{r.n}</button>)}</div>
+              <div style={{marginTop:8,...label,marginBottom:4}}>Durée</div>
+              <div style={{display:"flex",gap:4}}>{[10,15,20,30,60].map(m=><button key={m} onClick={()=>setRMin(m)} style={{...cardHi(rMin===m),flex:1,cursor:"pointer",textAlign:"center",fontSize:12,fontWeight:600,fontFamily:"inherit",color:D.text,padding:"8px 2px"}}>{m}m</button>)}</div>
             </div>
-          )}
+          </>)}
+
+          {stab==="prefs"&&(<>
+            <div style={{marginBottom:16}}>
+              <div style={label}>Réveil</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{[["Semaine",cfg?.aw,v=>setCfg(c=>({...c,aw:v}))],["Week-end",cfg?.awe,v=>setCfg(c=>({...c,awe:v}))]].map(([l,v,f])=><div key={l} style={card}><div style={{fontSize:9,color:D.text3,fontWeight:600,marginBottom:4}}>{l}</div><input type="time" value={v} onChange={e=>f(e.target.value)} style={{width:"100%",background:"transparent",border:`1px solid ${D.border}`,borderRadius:8,padding:6,color:D.text,fontSize:20,fontWeight:200,fontFamily:"inherit",textAlign:"center",outline:"none"}}/></div>)}</div>
+            </div>
+            <div style={{marginBottom:16}}><div style={label}>Ville</div><input value={cfg?.city} onChange={e=>setCfg(c=>({...c,city:e.target.value}))} style={{width:"100%",...card,color:D.text,fontSize:14,fontFamily:"inherit",outline:"none"}}/></div>
+            <div style={{marginBottom:16}}><div style={label}>Voix</div>{voices.slice(0,5).map((v,i)=><button key={i} onClick={()=>{setVoice({lang:v.lang,native:v});const u=new SpeechSynthesisUtterance("Bonjour.");u.voice=v;window.speechSynthesis.speak(u)}} style={{...cardHi(voice?.native?.name===v.name),width:"100%",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontFamily:"inherit",color:D.text,marginBottom:4,padding:"10px 14px"}}><span style={{flex:1,fontSize:12,fontWeight:500,textAlign:"left"}}>{v.name}</span><span style={{fontSize:10,color:D.text3}}>{v.lang}</span></button>)}</div>
+            <div style={{marginBottom:16}}><div style={label}>Humeur (citations)</div><div style={{display:"flex",gap:5}}>{MOODS.map(m=><button key={m.e} onClick={()=>setMood(m.e)} style={{...cardHi(mood===m.e),flex:1,cursor:"pointer",textAlign:"center",fontFamily:"inherit",color:D.text,padding:"10px 2px"}}><div style={{fontSize:18}}>{m.e}</div><div style={{fontSize:8,color:D.text3,marginTop:2}}>{m.l}</div></button>)}</div></div>
+            <div><div style={label}>Détails météo</div>{[["wind","Vent"],["rain","Pluie mm"],["sun","Soleil"],["hum","Humidité"]].map(([k,l])=><div key={k} style={{...card,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13}}>{l}</span><Switch on={wDet[k]} onToggle={()=>setWDet(d=>({...d,[k]:!d[k]}))}/></div>)}</div>
+          </>)}
         </div>
       </div>
     );
   }
 
   // ━━━ HOME ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const activeList=order.filter(id=>plugs.includes(id));
+  const actList=order.filter(id=>plugs.includes(id));
   return(
-    <div style={pg}><style>{CSS}</style>
+    <div style={page}><style>{CSS}</style>
       <div style={{...pad,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
+        {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:0}}>
-          <div style={{fontSize:14,fontWeight:600,letterSpacing:-.3,color:T.mu}}><span style={{color:T.ac}}>Sun</span>rise</div>
-          <div style={{display:"flex",gap:5,alignItems:"center"}}>
-            {streak>0&&<span style={{fontSize:11,color:T.ac}}>🔥{streak}j</span>}
-            <button onClick={()=>setScr("settings")} style={{background:T.card,border:`1px solid ${T.cb}`,borderRadius:8,padding:"4px 9px",fontSize:12,cursor:"pointer",fontFamily:"inherit",color:T.mu}}>⚙️</button>
-          </div>
+          <div style={{fontSize:13,fontWeight:500,letterSpacing:.5,color:D.text3}}>SUNRISE</div>
+          <button onClick={()=>setScr("settings")} style={{...card,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit",color:D.text3}}>Réglages</button>
         </div>
 
         {/* Clock */}
-        <div style={{margin:"24px 0 4px",animation:"fu .8s"}}>
-          <ClockFace time={hhmm} T={T}/>
-          <div style={{textAlign:"center",fontSize:24,fontWeight:100,color:T.mu+"55",marginTop:-4,fontVariantNumeric:"tabular-nums"}}>{secs}</div>
+        <div style={{textAlign:"center",margin:"28px 0 4px",animation:"fadeIn .8s"}}>
+          <div style={{fontSize:84,fontWeight:100,letterSpacing:-5,lineHeight:1,color:D.accent,animation:"breathe 4s ease infinite"}}>{hhmm}</div>
+          <div style={{fontSize:20,fontWeight:100,color:D.text3+"66",marginTop:0}}>{secs}</div>
+        </div>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:13,color:D.text3,textTransform:"capitalize"}}>{dStr}</div>
+          <div style={{fontSize:12,color:D.text3,marginTop:4}}>{city}{cfg?.name?` · ${cfg.name}`:""}</div>
         </div>
 
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:13,color:T.mu,textTransform:"capitalize"}}>{dateStr}</div>
-          <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:6}}>
-            <span style={tg}>📍 {city}</span>
-            <span style={tg}>{isWE?"🛋️ W-E":"💼 Semaine"}</span>
-          </div>
-          {userName&&<div style={{fontSize:12,color:T.mu,marginTop:6,fontWeight:300}}>Bonjour, {userName}</div>}
-        </div>
-
-        {/* Weather mini */}
-        {weather&&<div style={{...cd,display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:10,animation:"fu .6s ease .1s both"}}><span style={{fontSize:26}}>{wI(weather.current.weathercode)}</span><div><div style={{fontSize:22,fontWeight:100,color:T.clock}}>{Math.round(weather.current.temperature_2m)}°</div><div style={{fontSize:11,color:T.mu}}>{wD(weather.current.weathercode)}</div></div><div style={{fontSize:10,color:T.mu,marginLeft:6}}><div>↑{Math.round(weather.daily.temperature_2m_max[0])}° ↓{Math.round(weather.daily.temperature_2m_min[0])}°</div></div></div>}
+        {/* Weather */}
+        {wx&&<div style={{...card,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,animation:"fadeIn .6s ease .1s both"}}>
+          <div><div style={{fontSize:22,fontWeight:200,color:D.accent}}>{Math.round(wx.current.temperature_2m)}°</div><div style={{fontSize:12,color:D.text2}}>{wD(wx.current.weathercode)}</div></div>
+          <div style={{fontSize:11,color:D.text3,textAlign:"right"}}><div>↑{Math.round(wx.daily.temperature_2m_max[0])}° ↓{Math.round(wx.daily.temperature_2m_min[0])}°</div>{wDet.sun&&wx.daily.sunrise&&<div>{wx.daily.sunrise[0]?.split("T")[1]}</div>}</div>
+        </div>}
 
         {/* Alarm */}
-        <div style={{...cd,marginBottom:10,animation:"fu .6s ease .2s both"}}>
+        <div style={{...card,marginBottom:10,animation:"fadeIn .6s ease .15s both"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div><div style={{fontSize:9,color:T.mu,fontWeight:700,letterSpacing:1}}>RÉVEIL {isWE?"W-E":"SEMAINE"}</div><div style={{fontSize:26,fontWeight:100,color:T.clock,marginTop:2}}>{alarm}</div></div>
-            <button onClick={()=>setAOn(!aOn)} style={{width:46,height:24,borderRadius:12,background:aOn?T.ac:T.card,border:`1px solid ${aOn?T.ac:T.cb}`,cursor:"pointer",position:"relative",transition:"all .25s",padding:0}}>
-              <div style={{width:18,height:18,borderRadius:9,background:aOn?"#fff":T.mu,position:"absolute",top:2,left:aOn?26:2,transition:"all .25s"}}/>
-            </button>
+            <div><div style={{fontSize:10,color:D.text3,fontWeight:600,letterSpacing:1}}>RÉVEIL {isWE?"WEEK-END":"SEMAINE"}</div><div style={{fontSize:26,fontWeight:100,color:D.accent,marginTop:2}}>{al}</div></div>
+            <Switch on={aOn} onToggle={()=>setAOn(!aOn)}/>
           </div>
-          {aOn&&<div style={{fontSize:11,color:"#5a9a5a",marginTop:4}}>✓ Programmé · volume progressif</div>}
+          {aOn&&<div style={{fontSize:10,color:D.green,marginTop:4}}>Programmé · volume progressif</div>}
         </div>
 
-        <button onClick={startBriefing} style={{width:"100%",background:T.ac,border:"none",borderRadius:14,padding:13,color:T.bg,fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:"inherit",marginBottom:14,animation:"fu .6s ease .25s both"}}>
-          ▶ Lancer le briefing
-        </button>
+        {/* Launch */}
+        <div style={{animation:"fadeIn .6s ease .2s both"}}><Btn onClick={startB} primary>Lancer le briefing</Btn></div>
 
-        {/* Routine pills */}
-        <div style={{marginBottom:10,animation:"fu .6s ease .3s both"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={sec}>Routine · {activeList.length} plugins</span><button onClick={()=>{setScr("settings");setStab("plugins")}} style={{background:"none",border:"none",color:T.ac,fontSize:10,cursor:"pointer",fontFamily:"inherit",padding:0}}>Modifier ↗</button></div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{activeList.map((pid,i)=>{const pl=ALL_PLUGINS.find(p=>p.id===pid);return<div key={pid} style={{background:T.card,border:`1px solid ${T.cb}`,borderRadius:8,padding:"4px 9px",display:"flex",alignItems:"center",gap:4,fontSize:11}}><span style={{fontSize:8,color:T.mu,fontWeight:700}}>{i+1}</span><span>{pl?.icon}</span><span style={{fontWeight:600}}>{pl?.name}</span></div>})}</div>
+        {/* Routine */}
+        <div style={{marginTop:16,marginBottom:10,animation:"fadeIn .6s ease .25s both"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={label}>Routine · {actList.length} étapes</span>
+            <button onClick={()=>setScr("settings")} style={{background:"none",border:"none",color:D.accent,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Modifier</button>
+          </div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{actList.map((pid,i)=>{const pl=PLUGS.find(p=>p.id===pid);return<div key={pid} style={{...card,padding:"4px 10px",display:"flex",alignItems:"center",gap:4,fontSize:11}}><span style={{fontSize:9,color:D.text3}}>{i+1}</span><span style={{color:D.accent,fontSize:10}}>{pl?.icon}</span><span style={{fontWeight:500}}>{pl?.label}</span></div>})}</div>
         </div>
 
-        {/* Petit-dej preview */}
-        {plugs.includes("petitdej")&&<div style={{...cd,display:"flex",alignItems:"center",gap:10,marginBottom:10,animation:"fu .6s ease .33s both"}}><span style={{fontSize:24}}>{todayPDJ.icon}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{todayPDJ.name}</div><div style={{fontSize:10,color:T.mu}}>P{todayPDJ.prot}g · {todayPDJ.energy}</div></div><div style={{fontSize:18,fontWeight:100,color:T.clock}}>{todayPDJ.cal}<span style={{fontSize:9,color:T.mu}}> kcal</span></div></div>}
+        {/* Petit-dej */}
+        {plugs.includes("petitdej")&&<div style={{...card,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,animation:"fadeIn .6s ease .3s both"}}><div><div style={{fontSize:13,fontWeight:500}}>{todayPDJ.n}</div><div style={{fontSize:11,color:D.text3,marginTop:2}}>{todayPDJ.d}</div></div><div style={{fontSize:18,fontWeight:100,color:D.accent}}>{todayPDJ.cal}<span style={{fontSize:9,color:D.text3}}> kcal</span></div></div>}
 
-        {/* Next event */}
-        {smartAgenda.length>0&&<div style={{...cd,borderLeft:`3px solid ${smartAgenda[0].col}`,display:"flex",alignItems:"center",gap:10,marginBottom:10,animation:"fu .6s ease .36s both"}}><span style={{fontSize:12,fontWeight:700,color:T.ac}}>{smartAgenda[0].time}</span><span style={{fontSize:12,fontWeight:500}}>{smartAgenda[0].title}</span></div>}
+        {/* Agenda */}
+        {smartAg.length>0&&plugs.includes("agenda")&&<div style={{...card,display:"flex",alignItems:"center",gap:10,marginBottom:10,animation:"fadeIn .6s ease .35s both"}}><span style={{fontSize:12,fontWeight:600,color:D.accent}}>{smartAg[0].t}</span><span style={{fontSize:13}}>{smartAg[0].n}</span></div>}
 
-        <div style={{marginTop:"auto",textAlign:"center",fontSize:9,color:T.mu,opacity:.3,paddingTop:8}}>Sunrise · Réveil vocal intelligent</div>
+        <div style={{marginTop:"auto",textAlign:"center",fontSize:9,color:D.text3,opacity:.4,paddingTop:8}}>Sunrise</div>
       </div>
     </div>
   );
